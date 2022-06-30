@@ -23,9 +23,8 @@
  ***************************************************************************************/
 
 #include <QLoggerLevel.h>
-
-#include <QMutex>
 #include <QMap>
+#include <QMutex>
 #include <QVariant>
 
 namespace QLogger
@@ -39,13 +38,13 @@ class QLoggerWriter;
 class QLoggerManager
 {
 public:
-   /**
+    /**
     * @brief Gets an instance to the QLoggerManager.
     * @return A pointer to the instance.
     */
-   static QLoggerManager *getInstance();
+    static QLoggerManager *getInstance();
 
-   /**
+    /**
     * @brief This method creates a QLoogerWriter that stores the name of the file and the log
     * level assigned to it. Here is added to the map the different modules assigned to each
     * log file. The method returns <em>false</em> if a module is configured to be stored in
@@ -60,11 +59,8 @@ public:
     * @param messageOptions Specifies what elements are displayed in one line of log message.
     * @return Returns true if any error have been done.
     */
-   bool addDestination(const QString &fileDest, const QString &module, LogLevel level = LogLevel::Warning,
-                       const QString &fileFolderDestination = QString(), LogMode mode = LogMode::OnlyFile,
-                       LogFileDisplay fileSuffixIfFull = LogFileDisplay::DateTime,
-                       LogMessageDisplays messageOptions = LogMessageDisplay::Default, bool notify = true);
-   /**
+    bool addDestination(const QString &fileDest, const QString &module, LogLevel level = LogLevel::Warning, const QString &fileFolderDestination = QString(), LogMode mode = LogMode::OnlyFile, LogFileDisplay fileSuffixIfFull = LogFileDisplay::DateTime, LogMessageDisplays messageOptions = LogMessageDisplay::Default, bool notify = true);
+    /**
     * @brief This method creates a QLoogerWriter that stores the name of the file and the log
     * level assigned to it. Here is added to the map the different modules assigned to each
     * log file. The method returns <em>false</em> if a module is configured to be stored in
@@ -79,19 +75,16 @@ public:
     * @param messageOptions Specifies what elements are displayed in one line of log message.
     * @return Returns true if any error have been done.
     */
-   bool addDestination(const QString &fileDest, const QStringList &modules, LogLevel level = LogLevel::Warning,
-                       const QString &fileFolderDestination = QString(), LogMode mode = LogMode::OnlyFile,
-                       LogFileDisplay fileSuffixIfFull = LogFileDisplay::DateTime,
-                       LogMessageDisplays messageOptions = LogMessageDisplay::Default, bool notify = true);
-   /**
+    bool addDestination(const QString &fileDest, const QStringList &modules, LogLevel level = LogLevel::Warning, const QString &fileFolderDestination = QString(), LogMode mode = LogMode::OnlyFile, LogFileDisplay fileSuffixIfFull = LogFileDisplay::DateTime, LogMessageDisplays messageOptions = LogMessageDisplay::Default, bool notify = true);
+    /**
     * @brief Clears old log files from the current storage folder.
     *
     * @param fileFolderDestination The destination folder.
     * @param days Minimum age of log files to delete. Logs older than
     *        this value will be removed. If days is -1, deletes any log file.
     */
-   static void clearFileDestinationFolder(const QString &fileFolderDestination, int days = -1);
-   /**
+    static void clearFileDestinationFolder(const QString &fileFolderDestination, int days, const QStringList &listFilter);
+    /**
     * @brief enqueueMessage Enqueues a message in the corresponding QLoggerWritter.
     * @param module The module that writes the message.
     * @param level The level of the message.
@@ -100,125 +93,128 @@ public:
     * @param file The file that logs.
     * @param line The line in the file where the log comes from.
     */
-   void enqueueMessage(const QString &module, LogLevel level, const QString &message, const QString &function,
-                       const QString &file, int line);
+    void enqueueMessage(const QString &module, LogLevel level, const QString &message, const QString &function, const QString &file, int line);
 
-   /**
+    /**
     * @brief Whether the QLogger is paused or not.
     */
-   bool isPaused() const { return mIsStop; }
+    bool isPaused() const { return mIsStop; }
 
-   /**
+    /**
     * @brief pause Pauses all QLoggerWriters.
     */
-   void pause();
+    void pause();
 
-   /**
+    /**
     * @brief resume Resumes all QLoggerWriters that where paused.
     */
-   void resume();
+    void resume();
 
-   /**
+    /**
     * @brief getDefaultFileDestinationFolder Gets the default file destination folder.
     * @return The file destination folder
     */
-   QString getDefaultFileDestinationFolder() const { return mDefaultFileDestinationFolder; }
+    QString getDefaultFileDestinationFolder() const { return mDefaultFileDestinationFolder; }
 
-   /**
+    /**
     * @brief getDefaultMode Gets the default log mode.
     * @return The log mode
     */
-   LogMode getDefaultMode() const { return mDefaultMode; }
+    LogMode getDefaultMode() const { return mDefaultMode; }
 
-   /**
+    /**
     * @brief getDefaultLevel Gets the default log level.
     * @return The log level
     */
-   LogLevel getDefaultLevel() const { return mDefaultLevel; }
+    LogLevel getDefaultLevel() const { return mDefaultLevel; }
 
-   /**
+    /**
     * @brief Sets default values for QLoggerWritter parameters. Useful for multiple QLoggerWritter.
     */
-   void setDefaultFileDestinationFolder(const QString &fileDestinationFolder);
-   void setDefaultFileDestination(const QString &fileDestination) { mDefaultFileDestination = fileDestination; }
-   void setDefaultFileSuffixIfFull(LogFileDisplay fileSuffixIfFull) { mDefaultFileSuffixIfFull = fileSuffixIfFull; }
+    void setDefaultFileDestinationFolder(const QString &fileDestinationFolder);
+    void setDefaultFileDestination(const QString &fileDestination) { mDefaultFileDestination = fileDestination; }
+    void setDefaultFileSuffixIfFull(LogFileDisplay fileSuffixIfFull) { mDefaultFileSuffixIfFull = fileSuffixIfFull; }
 
-   void setDefaultLevel(LogLevel level) { mDefaultLevel = level; }
-   void setDefaultMode(LogMode mode) { mDefaultMode = mode; }
-   void setDefaultMaxFileSize(int maxFileSize) { mDefaultMaxFileSize = maxFileSize; }
-   void setDefaultMessageOptions(LogMessageDisplays messageOptions) { mDefaultMessageOptions = messageOptions; }
+    void setDefaultLevel(LogLevel level) { mDefaultLevel = level; }
+    void setDefaultMode(LogMode mode) { mDefaultMode = mode; }
+    void setDefaultMaxFileSize(int maxFileSize) { mDefaultMaxFileSize = maxFileSize; }
+    void setDefaultMessageOptions(LogMessageDisplays messageOptions) { mDefaultMessageOptions = messageOptions; }
 
-   /**
+    /**
     * @brief overwriteLogMode Overwrites the logging mode in all the destinations. Sets the default logging mode.
     *
     * @param mode The new log mode
     */
-   void overwriteLogMode(LogMode mode);
-   /**
+    void overwriteLogMode(LogMode mode);
+    /**
     * @brief overwriteLogLevel Overwrites the log level in all the destinations. Sets the default log level.
     *
     * @param level The new log level
     */
-   void overwriteLogLevel(LogLevel level);
-   /**
+    void overwriteLogLevel(LogLevel level);
+    /**
     * @brief overwriteMaxFileSize Overwrites the maximum file size in all the destinations. Sets the default max file
     * size.
     *
     * @param maxSize The new file size
     */
-   void overwriteMaxFileSize(int maxSize);
+    void overwriteMaxFileSize(int maxSize);
 
-   /**
+    /**
     * @brief moveLogsWhenClose Moves all the logs to a new folder. This will happen only on close.
     * @param newLogsFolder The new folder that will store the logs.
     */
-   void moveLogsWhenClose(const QString &newLogsFolder) { mNewLogsFolder = newLogsFolder; }
+    void moveLogsWhenClose(const QString &newLogsFolder) { mNewLogsFolder = newLogsFolder; }
+
+    //QLogger commit
+    QMap<QString, QLoggerWriter *> getModules() { return mModuleDest; }
 
 private:
-   /**
+    /**
     * @brief Checks if the logger is stop
     */
-   bool mIsStop = false;
+    bool mIsStop = false;
 
-   /**
+    /**
     * @brief Map that stores the module and the file it is assigned.
     */
-   QMap<QString, QLoggerWriter *> mModuleDest;
+    QMap<QString, QLoggerWriter *> mModuleDest;
 
-   /**
+    /**
     * @brief Defines the queue of messages when no writers have been set yet.
     */
-   QMultiMap<QString, QVector<QVariant>> mNonWriterQueue;
+    QMultiMap<QString, QVector<QVariant>> mNonWriterQueue;
 
-   /**
+    /**
     * @brief Default values for QLoggerWritter parameters. Useful for multiple QLoggerWritter.
     */
-   QString mDefaultFileDestinationFolder;
-   QString mDefaultFileDestination;
-   LogFileDisplay mDefaultFileSuffixIfFull = LogFileDisplay::DateTime;
+    QString mDefaultFileDestinationFolder;
+    QString mDefaultFileDestination;
+    LogFileDisplay mDefaultFileSuffixIfFull = LogFileDisplay::DateTime;
 
-   LogMode mDefaultMode = LogMode::OnlyFile;
-   LogLevel mDefaultLevel = LogLevel::Warning;
-   int mDefaultMaxFileSize = 1024 * 1024; //! @note 1Mio
-   LogMessageDisplays mDefaultMessageOptions = LogMessageDisplay::Default;
-   QString mNewLogsFolder;
+    LogMode mDefaultMode   = LogMode::OnlyFile;
+    LogLevel mDefaultLevel = LogLevel::Warning;
 
-   /**
+    int mDefaultMaxFileSize                   = 1024 * 1024;  //! @note 1Mio
+    LogMessageDisplays mDefaultMessageOptions = LogMessageDisplay::Default;
+    QString mNewLogsFolder;
+
+    /**
     * @brief Mutex to make the method thread-safe.
     */
-   QMutex mMutex { QMutex::Recursive };
+    QRecursiveMutex mMutex;
 
-   /**
+    /**
     * @brief Default builder of the class. It starts the thread.
     */
-   QLoggerManager() = default;
+    QLoggerManager() = default;
 
-   /**
+    /**
     * @brief Destructor
     */
-   ~QLoggerManager();
+    ~QLoggerManager();
 
-   /**
+    /**
     * @brief Initializes and returns a new instance of QLoggerWriter with the given parameters.
     * @param fileDest The file name and path to print logs.
     * @param level The maximum level allowed.
@@ -228,17 +224,16 @@ private:
     * @param messageOptions Specifies what elements are displayed in one line of log message.
     * @return the newly created QLoggerWriter instance.
     */
-   QLoggerWriter *createWriter(const QString &fileDest, LogLevel level, const QString &fileFolderDestination,
-                               LogMode mode, LogFileDisplay fileSuffixIfFull, LogMessageDisplays messageOptions) const;
+    QLoggerWriter *createWriter(const QString &fileDest, LogLevel level, const QString &fileFolderDestination, LogMode mode, LogFileDisplay fileSuffixIfFull, LogMessageDisplays messageOptions) const;
 
-   void startWriter(const QString &module, QLoggerWriter *log, LogMode mode, bool notify);
+    void startWriter(const QString &module, QLoggerWriter *log, LogMode mode, bool notify);
 
-   /**
+    /**
     * @brief Checks the queue and writes the messages if the writer is the correct one. The queue is emptied
     * for that module.
     * @param module The module to dequeue the messages from
     */
-   void writeAndDequeueMessages(const QString &module);
+    void writeAndDequeueMessages(const QString &module);
 };
 
 /**
@@ -253,10 +248,9 @@ private:
  * @param file The file that logs.
  * @param line The line in the file where the log comes from.
  */
-extern void QLog_(const QString &module, QLogger::LogLevel level, const QString &message, const QString &function,
-                  const QString &file = QString(), int line = -1);
+extern void QLog_(const QString &module, QLogger::LogLevel level, const QString &message, const QString &function, const QString &file = QString(), int line = -1);
 
-}
+}  // namespace QLogger
 
 #ifndef QLog_Trace
 /**
@@ -264,9 +258,8 @@ extern void QLog_(const QString &module, QLogger::LogLevel level, const QString 
  * @param module The module that the message references.
  * @param message The message.
  */
-#   define QLog_Trace(module, message)                                                                                 \
-      QLogger::QLoggerManager::getInstance()->enqueueMessage(module, QLogger::LogLevel::Trace, message, __FUNCTION__,  \
-                                                             __FILE__, __LINE__)
+#    define QLog_Trace(module, message) \
+        QLogger::QLoggerManager::getInstance()->enqueueMessage(module, QLogger::LogLevel::Trace, message, __FUNCTION__, __FILE__, __LINE__)
 #endif
 
 #ifndef QLog_Debug
@@ -275,9 +268,8 @@ extern void QLog_(const QString &module, QLogger::LogLevel level, const QString 
  * @param module The module that the message references.
  * @param message The message.
  */
-#   define QLog_Debug(module, message)                                                                                 \
-      QLogger::QLoggerManager::getInstance()->enqueueMessage(module, QLogger::LogLevel::Debug, message, __FUNCTION__,  \
-                                                             __FILE__, __LINE__)
+#    define QLog_Debug(module, message) \
+        QLogger::QLoggerManager::getInstance()->enqueueMessage(module, QLogger::LogLevel::Debug, message, __FUNCTION__, __FILE__, __LINE__)
 #endif
 
 #ifndef QLog_Info
@@ -286,9 +278,8 @@ extern void QLog_(const QString &module, QLogger::LogLevel level, const QString 
  * @param module The module that the message references.
  * @param message The message.
  */
-#   define QLog_Info(module, message)                                                                                  \
-      QLogger::QLoggerManager::getInstance()->enqueueMessage(module, QLogger::LogLevel::Info, message, __FUNCTION__,   \
-                                                             __FILE__, __LINE__)
+#    define QLog_Info(module, message) \
+        QLogger::QLoggerManager::getInstance()->enqueueMessage(module, QLogger::LogLevel::Info, message, __FUNCTION__, __FILE__, __LINE__)
 #endif
 
 #ifndef QLog_Warning
@@ -297,9 +288,8 @@ extern void QLog_(const QString &module, QLogger::LogLevel level, const QString 
  * @param module The module that the message references.
  * @param message The message.
  */
-#   define QLog_Warning(module, message)                                                                               \
-      QLogger::QLoggerManager::getInstance()->enqueueMessage(module, QLogger::LogLevel::Warning, message,              \
-                                                             __FUNCTION__, __FILE__, __LINE__)
+#    define QLog_Warning(module, message) \
+        QLogger::QLoggerManager::getInstance()->enqueueMessage(module, QLogger::LogLevel::Warning, message, __FUNCTION__, __FILE__, __LINE__)
 #endif
 
 #ifndef QLog_Error
@@ -308,9 +298,8 @@ extern void QLog_(const QString &module, QLogger::LogLevel level, const QString 
  * @param module The module that the message references.
  * @param message The message.
  */
-#   define QLog_Error(module, message)                                                                                 \
-      QLogger::QLoggerManager::getInstance()->enqueueMessage(module, QLogger::LogLevel::Error, message, __FUNCTION__,  \
-                                                             __FILE__, __LINE__)
+#    define QLog_Error(module, message) \
+        QLogger::QLoggerManager::getInstance()->enqueueMessage(module, QLogger::LogLevel::Error, message, __FUNCTION__, __FILE__, __LINE__)
 #endif
 
 #ifndef QLog_Fatal
@@ -319,7 +308,6 @@ extern void QLog_(const QString &module, QLogger::LogLevel level, const QString 
  * @param module The module that the message references.
  * @param message The message.
  */
-#   define QLog_Fatal(module, message)                                                                                 \
-      QLogger::QLoggerManager::getInstance()->enqueueMessage(module, QLogger::LogLevel::Fatal, message, __FUNCTION__,  \
-                                                             __FILE__, __LINE__)
+#    define QLog_Fatal(module, message) \
+        QLogger::QLoggerManager::getInstance()->enqueueMessage(module, QLogger::LogLevel::Fatal, message, __FUNCTION__, __FILE__, __LINE__)
 #endif

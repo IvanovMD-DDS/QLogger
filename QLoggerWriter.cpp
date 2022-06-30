@@ -1,10 +1,13 @@
 #include "QLoggerWriter.h"
 
+#include <QAbstractEventDispatcher>
 #include <QDateTime>
-#include <QFile>
-#include <QTextStream>
-#include <QDir>
 #include <QDebug>
+#include <QDir>
+#include <QFile>
+#include <QFutureWatcher>
+#include <QProcess>
+#include <QTextStream>
 
 namespace
 {
@@ -15,249 +18,356 @@ namespace
  */
 QString levelToText(const QLogger::LogLevel &level)
 {
-   switch (level)
-   {
-      case QLogger::LogLevel::Trace:
-         return "Trace";
-      case QLogger::LogLevel::Debug:
-         return "Debug";
-      case QLogger::LogLevel::Info:
-         return "Info";
-      case QLogger::LogLevel::Warning:
-         return "Warning";
-      case QLogger::LogLevel::Error:
-         return "Error";
-      case QLogger::LogLevel::Fatal:
-         return "Fatal";
-   }
+    switch (level)
+    {
+    case QLogger::LogLevel::Trace:
+        return "Trace";
+    case QLogger::LogLevel::Debug:
+        return "Debug";
+    case QLogger::LogLevel::Info:
+        return "Info";
+    case QLogger::LogLevel::Warning:
+        return "Warning";
+    case QLogger::LogLevel::Error:
+        return "Error";
+    case QLogger::LogLevel::Fatal:
+        return "Fatal";
+    }
 
-   return QString();
+    return QString();
 }
-}
+}  // namespace
 
 namespace QLogger
 {
 
-QLoggerWriter::QLoggerWriter(const QString &fileDestination, LogLevel level, const QString &fileFolderDestination,
-                             LogMode mode, LogFileDisplay fileSuffixIfFull, LogMessageDisplays messageOptions)
-   : mFileSuffixIfFull(fileSuffixIfFull)
-   , mMode(mode)
-   , mLevel(level)
-   , mMessageOptions(messageOptions)
+QMutex QLoggerWriter::zipLock;
+QMutex QLoggerWriter::writeLock;
+
+QLoggerWriter::QLoggerWriter(const QString &fileDestination, LogLevel level, const QString &fileFolderDestination, LogMode mode, LogFileDisplay fileSuffixIfFull, LogMessageDisplays messageOptions)
+    : mFileSuffixIfFull(fileSuffixIfFull)
+    , mMode(mode)
+    , mLevel(level)
+    , mMessageOptions(messageOptions)
 {
-   mFileDestinationFolder = fileFolderDestination.isEmpty() ? QDir::currentPath() + "/logs/" : fileFolderDestination;
+    mFileDestinationFolder = fileFolderDestination.isEmpty() ? QDir::currentPath() + "/logs/" : fileFolderDestination;
 
-   if (!mFileDestinationFolder.endsWith("/"))
-      mFileDestinationFolder.append("/");
+    if (!mFileDestinationFolder.endsWith("/"))
+        mFileDestinationFolder.append("/");
 
-   mFileDestination = mFileDestinationFolder + fileDestination;
+    mFileDestination = mFileDestinationFolder + fileDestination;
 
-   QDir dir(mFileDestinationFolder);
-   if (fileDestination.isEmpty())
-   {
-      mFileDestination = dir.filePath(QString::fromLatin1("%1.log").arg(
-          QDateTime::currentDateTime().date().toString(QString::fromLatin1("yyyy-MM-dd"))));
-   }
-   else if (!fileDestination.contains(QLatin1Char('.')))
-      mFileDestination.append(QString::fromLatin1(".log"));
+    QDir dir(mFileDestinationFolder);
+    if (fileDestination.isEmpty())
+    {
+        mFileDestination = dir.filePath(QString::fromLatin1("%1.log").arg(
+            QDateTime::currentDateTime().date().toString(QString::fromLatin1("yyyy-MM-dd"))));
+    }
+    else if (!fileDestination.contains(QLatin1Char('.')))
+        mFileDestination.append(QString::fromLatin1(".log"));
 
-   if (mMode == LogMode::Full || mMode == LogMode::OnlyFile)
-      dir.mkpath(QStringLiteral("."));
+    if (mMode == LogMode::Full || mMode == LogMode::OnlyFile)
+        dir.mkpath(QStringLiteral("."));
+
+    //QLogger commit
+    {
+        wakeUpTime.start();
+
+        QFileInfo info(mFileDestination);
+
+        if (info.exists())
+        {
+            currentDate = info.lastModified().date();
+        }
+        else
+        {
+            currentDate = QDateTime::currentDateTime().date();
+        }
+    }
 }
 
 void QLoggerWriter::setLogMode(LogMode mode)
 {
-   mMode = mode;
+    mMode = mode;
 
-   if (mMode == LogMode::Full || mMode == LogMode::OnlyFile)
-   {
-      QDir dir(mFileDestinationFolder);
-      dir.mkpath(QStringLiteral("."));
-   }
+    if (mMode == LogMode::Full || mMode == LogMode::OnlyFile)
+    {
+        QDir dir(mFileDestinationFolder);
+        dir.mkpath(QStringLiteral("."));
+    }
 
-   if (mode != LogMode::Disabled && !this->isRunning())
-      start();
+    if (mode != LogMode::Disabled && !this->isRunning())
+        start();
 }
 
 QString QLoggerWriter::renameFileIfFull()
 {
-   QFile file(mFileDestination);
+    if (currentDate == QDateTime::currentDateTime().date())
+        return QString();
 
-   // Rename file if it's full
-   if (file.size() >= mMaxFileSize)
-   {
-      QString newName;
+    QFile file(mFileDestination);
 
-      const auto fileDestination = mFileDestination.left(mFileDestination.lastIndexOf('.'));
-      const auto fileExtension = mFileDestination.mid(mFileDestination.lastIndexOf('.') + 1);
+    {  //QLogger commit
+        QString newName = mFileDestination;
+        newName.insert(newName.size() - 4, currentDate.toString("_yyyy_MM_dd"));
 
-      if (mFileSuffixIfFull == LogFileDisplay::DateTime)
-      {
-         newName
-             = QString("%1_%2.%3")
-                   .arg(fileDestination, QDateTime::currentDateTime().toString("dd_MM_yy__hh_mm_ss"), fileExtension);
-      }
-      else
-         newName = generateDuplicateFilename(fileDestination, fileExtension);
+        if (!file.rename(mFileDestination, newName))  // не удалось переименовать
+            return QString();
 
-      const auto renamed = file.rename(mFileDestination, newName);
+        currentDate = QDateTime::currentDateTime().date();
 
-      return renamed ? newName : QString();
-   }
+        QMutexLocker zipLock1(&zipLock);
 
-   return QString();
+        QElapsedTimer time;
+        time.start();
+
+        QString archiveName = newName.mid(0, newName.size() - 4) + ".7z";
+
+        QStringList param;
+        param << "a"
+              << "-t7z"
+              << "-mx9"
+              << archiveName << newName;
+
+        QProcess zip;
+
+        QString pathExe = "C:/Program Files/7-Zip/7z.exe";
+        zip.start(pathExe, param);
+        zip.waitForStarted();
+
+        bool res = zip.waitForFinished(1000 * 60 * 15);  // 15 min
+
+        //        while (true)
+        //        {
+        //            auto read = QString(zip.readAll()).split("\r\n", Qt::SkipEmptyParts);
+
+        //            int a = 1;
+
+        //            QThread::currentThread()->sleep(5);
+        //        }
+
+        auto a1 = zip.exitCode();
+        auto a2 = zip.exitStatus();
+
+        zip.kill();
+
+        QString res1 = archiveName + (res ? " ok" : "fail");
+
+        QString debug = QString(" || Archive : %1. Time::%3").arg(res1, QString::number(time.elapsed()));
+
+        return newName + debug;
+    }
+
+    //--------
+    // Rename file if it's full
+    if (file.size() >= mMaxFileSize)
+    {
+        QString newName;
+
+        const auto fileDestination = mFileDestination.left(mFileDestination.lastIndexOf('.'));
+        const auto fileExtension   = mFileDestination.mid(mFileDestination.lastIndexOf('.') + 1);
+
+        if (mFileSuffixIfFull == LogFileDisplay::DateTime)
+        {
+            newName
+                = QString("%1_%2.%3")
+                      .arg(fileDestination, QDateTime::currentDateTime().toString("dd_MM_yy__hh_mm_ss"), fileExtension);
+        }
+        else
+            newName = generateDuplicateFilename(fileDestination, fileExtension);
+
+        const auto renamed = file.rename(mFileDestination, newName);
+
+        return renamed ? newName : QString();
+    }
+
+    return QString();
 }
 
-QString QLoggerWriter::generateDuplicateFilename(const QString &fileDestination, const QString &fileExtension,
-                                                 int fileSuffixNumber)
+QString QLoggerWriter::generateDuplicateFilename(const QString &fileDestination, const QString &fileExtension, int fileSuffixNumber)
 {
-   QString path(fileDestination);
-   if (fileSuffixNumber > 1)
-      path = QString("%1(%2).%3").arg(fileDestination, QString::number(fileSuffixNumber), fileExtension);
-   else
-      path.append(QString(".%1").arg(fileExtension));
+    QString path(fileDestination);
+    if (fileSuffixNumber > 1)
+        path = QString("%1(%2).%3").arg(fileDestination, QString::number(fileSuffixNumber), fileExtension);
+    else
+        path.append(QString(".%1").arg(fileExtension));
 
-   // A name already exists, increment the number and check again
-   if (QFileInfo::exists(path))
-      return generateDuplicateFilename(fileDestination, fileExtension, fileSuffixNumber + 1);
+    // A name already exists, increment the number and check again
+    if (QFileInfo::exists(path))
+        return generateDuplicateFilename(fileDestination, fileExtension, fileSuffixNumber + 1);
 
-   // No file exists at the given location, so no need to continue
-   return path;
+    // No file exists at the given location, so no need to continue
+    return path;
 }
 
 void QLoggerWriter::write(QVector<QString> messages)
 {
-   // Write data to console
-   if (mMode == LogMode::OnlyConsole)
-   {
-      for (const auto &message : messages)
-         qInfo() << message;
-
-      return;
-   }
-
-   // Write data to file
-   QFile file(mFileDestination);
-
-   const auto prevFilename = renameFileIfFull();
-
-   if (file.open(QIODevice::ReadWrite | QIODevice::Text | QIODevice::Append))
-   {
-      QTextStream out(&file);
-
-      if (!prevFilename.isEmpty())
-         out << QString("Previous log %1\n").arg(prevFilename);
-
-      for (const auto &message : messages)
-      {
-         out << message;
-
-         if (mMode == LogMode::Full)
+    // Write data to console
+    if (mMode == LogMode::OnlyConsole)
+    {
+        for (const auto &message : messages)
             qInfo() << message;
-      }
 
-      file.close();
-   }
+        return;
+    }
+
+    // Write data to file
+    QFile file(mFileDestination);
+
+    const auto prevFilename = renameFileIfFull();
+
+    QMutexLocker write(&writeLock);
+
+    if (file.open(QIODevice::ReadWrite | QIODevice::Text | QIODevice::Append))
+    {
+        QTextStream out(&file);
+
+        if (!prevFilename.isEmpty())
+            out << QString("Previous log %1\n").arg(prevFilename);
+
+        for (const auto &message : messages)
+        {
+            out << message;
+
+            if (mMode == LogMode::Full)
+                qInfo() << message;
+        }
+
+        file.close();
+    }
 }
 
-void QLoggerWriter::enqueue(const QDateTime &date, const QString &threadId, const QString &module, LogLevel level,
-                            const QString &function, const QString &fileName, int line, const QString &message)
+void QLoggerWriter::enqueue(const QDateTime &date, const QString &threadId, const QString &module, LogLevel level, const QString &function, const QString &fileName, int line, const QString &message)
 {
-   QMutexLocker locker(&mutex);
+    QMutexLocker locker(&mutex);
 
-   if (mMode == LogMode::Disabled)
-      return;
+    if (mMode == LogMode::Disabled)
+        return;
 
-   QString fileLine;
-   if (mMessageOptions.testFlag(LogMessageDisplay::File) && mMessageOptions.testFlag(LogMessageDisplay::Line)
-       && !fileName.isEmpty() && line > 0 && mLevel <= LogLevel::Debug)
-   {
-      fileLine = QString("{%1:%2}").arg(fileName, QString::number(line));
-   }
-   else if (mMessageOptions.testFlag(LogMessageDisplay::File) && mMessageOptions.testFlag(LogMessageDisplay::Function)
-            && !fileName.isEmpty() && !function.isEmpty() && mLevel <= LogLevel::Debug)
-   {
-      fileLine = QString("{%1}{%2}").arg(fileName, function);
-   }
+    QString fileLine;
+    if (mMessageOptions.testFlag(LogMessageDisplay::File) && mMessageOptions.testFlag(LogMessageDisplay::Line)
+        && !fileName.isEmpty() && line > 0 && mLevel <= LogLevel::Debug)
+    {
+        fileLine = QString("{%1:%2}").arg(fileName, QString::number(line));
+    }
+    else if (mMessageOptions.testFlag(LogMessageDisplay::File) && mMessageOptions.testFlag(LogMessageDisplay::Function)
+             && !fileName.isEmpty() && !function.isEmpty() && mLevel <= LogLevel::Debug)
+    {
+        fileLine = QString("{%1}{%2}").arg(fileName, function);
+    }
 
-   QString text;
-   if (mMessageOptions.testFlag(LogMessageDisplay::Default))
-   {
-      text = QString("[%1][%2][%3][%4]%5 %6")
-                 .arg(levelToText(level), module)
-                 .arg(date.toSecsSinceEpoch())
-                 .arg(threadId, fileLine, message);
-   }
-   else
-   {
-      if (mMessageOptions.testFlag(LogMessageDisplay::LogLevel))
-         text.append(QString("[%1]").arg(levelToText(level)));
+    QString text;
+    if (mMessageOptions.testFlag(LogMessageDisplay::Default))
+    {
+        text = QString("[%1][%2][%3][%4]%5 %6")
+                   .arg(levelToText(level), module)
+                   .arg(date.toString("yyyy-MM-dd hh:mm:ss:zzz"))
+                   .arg(threadId, fileLine, message);
+    }
+    else
+    {
+        if (mMessageOptions.testFlag(LogMessageDisplay::LogLevel))
+            text.append(QString("[%1]").arg(levelToText(level)));
 
-      if (mMessageOptions.testFlag(LogMessageDisplay::ModuleName))
-         text.append(QString("[%1]").arg(module));
+        if (mMessageOptions.testFlag(LogMessageDisplay::ModuleName))
+            text.append(QString("[%1]").arg(module));
 
-      if (mMessageOptions.testFlag(LogMessageDisplay::DateTime))
-         text.append(QString("[%1]").arg(date.toSecsSinceEpoch()));
+        if (mMessageOptions.testFlag(LogMessageDisplay::DateTime))
+            text.append(QString("[%1]").arg(date.toString("yyyy-MM-dd hh:mm:ss:zzz")));
 
-      if (mMessageOptions.testFlag(LogMessageDisplay::ThreadId))
-         text.append(QString("[%1]").arg(threadId));
+        if (mMessageOptions.testFlag(LogMessageDisplay::ThreadId))
+            text.append(QString("[%1]").arg(threadId));
 
-      if (!fileLine.isEmpty())
-      {
-         if (fileLine.startsWith(QChar::Space))
-            fileLine = fileLine.right(1);
+        if (!fileLine.isEmpty())
+        {
+            if (fileLine.startsWith(QChar::Space))
+                fileLine = fileLine.right(1);
 
-         text.append(fileLine);
-      }
-      if (mMessageOptions.testFlag(LogMessageDisplay::Message))
-      {
-         if (text.isEmpty() || text.endsWith(QChar::Space))
-            text.append(QString("%1").arg(message));
-         else
-            text.append(QString(" %1").arg(message));
-      }
-   }
+            text.append(fileLine);
+        }
+        if (mMessageOptions.testFlag(LogMessageDisplay::Message))
+        {
+            if (text.isEmpty() || text.endsWith(QChar::Space))
+                text.append(QString("%1").arg(message));
+            else
+                text.append(QString(" %1").arg(message));
+        }
+    }
 
-   text.append(QString::fromLatin1("\n"));
+    text.append(QString::fromLatin1("\n"));
 
-   mMessages.append(text);
+    mMessages.append(text);
 
-   if (!mIsStop)
-      mQueueNotEmpty.wakeAll();
+    if (wakeUpTime.elapsed() > writeMSec)
+    {
+        if (!mIsStop)
+            mQueueNotEmpty.wakeAll();
+
+        wakeUpTime.start();
+    }
 }
 
 void QLoggerWriter::run()
 {
-   if (!mQuit)
-   {
-      QMutexLocker locker(&mutex);
-      mQueueNotEmpty.wait(&mutex);
-   }
+    if (!mQuit)
+    {
+        QMutexLocker locker(&mutex);
+        mQueueNotEmpty.wait(&mutex);
+    }
 
-   while (!mQuit)
-   {
-      decltype(mMessages) copy;
+    while (!mQuit)
+    {
+        decltype(mMessages) copy;
 
-      {
-         QMutexLocker locker(&mutex);
-         std::swap(copy, mMessages);
-      }
+        {
+            QMutexLocker locker(&mutex);
+            std::swap(copy, mMessages);
+        }
 
-      write(std::move(copy));
+        write(std::move(copy));
 
-      if (!mQuit)
-      {
-         QMutexLocker locker(&mutex);
-         mQueueNotEmpty.wait(&mutex);
-      }
-   }
+        lastActive = QDateTime::currentDateTime();
+
+        if (!mQuit)
+        {
+            QMutexLocker locker(&mutex);
+            mQueueNotEmpty.wait(&mutex);
+        }
+    }
 }
 
 void QLoggerWriter::closeDestination()
 {
-   QMutexLocker locker(&mutex);
-   mQuit = true;
-   mQueueNotEmpty.wakeAll();
+    QMutexLocker locker(&mutex);
+
+    if (!mMessages.isEmpty())
+    {
+        decltype(mMessages) copy;
+
+        {
+            std::swap(copy, mMessages);
+        }
+
+        write(std::move(copy));
+    }
+
+    QVector<QString> closed(0);
+    closed.append(QString("Closed %1 \n").arg(QDateTime::currentDateTime().toString()));
+    write(closed);
+
+    mQuit = true;
+    mQueueNotEmpty.wakeAll();
 }
 
+void QLoggerWriter::forcePush()
+{
+    if (mMessages.count() > 0)
+    {
+        auto r = lastActive.secsTo(QDateTime::currentDateTime());
+
+        if (r > 5)
+            mQueueNotEmpty.wakeAll();
+    }
 }
+
+}  // namespace QLogger
