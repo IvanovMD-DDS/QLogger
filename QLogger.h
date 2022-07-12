@@ -167,7 +167,7 @@ public:
     void moveLogsWhenClose(const QString &newLogsFolder) { mNewLogsFolder = newLogsFolder; }
 
     //QLogger commit
-    QMap<QString, QLoggerWriter *> getModules() { return mModuleDest; }
+    const QMap<QString, QLoggerWriter *> getModules() { return mModuleDest; }
 
 private:
     /**
