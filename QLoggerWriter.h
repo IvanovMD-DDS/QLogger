@@ -166,6 +166,8 @@ private:
     static QMutex writeLock;
     QDateTime lastActive = QDateTime::currentDateTime();
 
+    QString zipFile(const QString &path);
+
     /**
     * @brief renameFileIfFull Truncates the log file in two. Keeps the filename for the new one and renames the old one
     * with the timestamp or with a file number.
@@ -190,7 +192,7 @@ private:
     *
     * @param message Pair of values consistent on the date and the message to be log.
     */
-    void write(const QVector<QString>& messages);
+    void write(const QVector<QString> &messages);
 };
 
 }  // namespace QLogger

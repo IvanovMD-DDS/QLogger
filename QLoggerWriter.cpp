@@ -116,37 +116,10 @@ QString QLoggerWriter::renameFileIfFull()
 
         currentDate = QDateTime::currentDateTime().date();
 
-        QMutexLocker zipLock1(&zipLock);
+        if (mQuit)  // if quit no zip
+            return newName;
 
-        QElapsedTimer time;
-        time.start();
-
-        QString archiveName = newName.mid(0, newName.size() - 4) + ".7z";
-
-        QStringList param;
-        param << "a"
-              << "-t7z"
-              << "-mx9"
-              << archiveName << newName;
-
-        QProcess zip;
-
-        QString pathExe = "C:/Program Files/7-Zip/7z.exe";
-        zip.start(pathExe, param);
-        zip.waitForStarted();
-
-        bool res = zip.waitForFinished(1000 * 60 * 15);  // 15 min
-
-        auto exitCode   = zip.exitCode();
-        auto exitStatus = zip.exitStatus();
-
-        zip.kill();
-
-        QString res1 = archiveName + (res ? " ok" : "fail");
-
-        QString debug = QString(" || Archive : %1. Time::%3").arg(res1, QString::number(time.elapsed()));
-
-        return newName + debug;
+        return zipFile(newName);
     }
 
     //--------
@@ -357,6 +330,43 @@ void QLoggerWriter::forcePush()
         if (r > 5)
             mQueueNotEmpty.wakeAll();
     }
+}
+
+QString QLoggerWriter::zipFile(const QString &path)
+{
+    QMutexLocker zipLock1(&zipLock);
+
+    QElapsedTimer time;
+    time.start();
+
+    // cut .log, add .7z
+    QString archiveName = path.mid(0, path.size() - 4) + ".7z";
+
+    QStringList param;
+    param << "a"
+          << "-t7z"
+          << "-mx9"
+          << archiveName << path;
+
+    QProcess zip;
+
+    QString pathExe = "C:/Program Files/7-Zip/7z.exe";
+    zip.start(pathExe, param);
+    zip.waitForStarted();
+
+    bool res = zip.waitForFinished(1000 * 60 * 15);  // 15 min
+
+    auto exitStatus = (bool)zip.exitStatus();
+
+    zip.close();
+
+    QString result = QString("%1 to archive : %2. %3. Time::%4")
+                         .arg(path,
+                              archiveName,
+                              QString("finished: %1, %2").arg(res ? "yes" : "no", exitStatus ? "The process crashed" : "The process exited normall"),
+                              QString::number(time.elapsed()));
+
+    return result;
 }
 
 }  // namespace QLogger
