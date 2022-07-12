@@ -137,17 +137,8 @@ QString QLoggerWriter::renameFileIfFull()
 
         bool res = zip.waitForFinished(1000 * 60 * 15);  // 15 min
 
-        //        while (true)
-        //        {
-        //            auto read = QString(zip.readAll()).split("\r\n", Qt::SkipEmptyParts);
-
-        //            int a = 1;
-
-        //            QThread::currentThread()->sleep(5);
-        //        }
-
-        auto a1 = zip.exitCode();
-        auto a2 = zip.exitStatus();
+        auto exitCode   = zip.exitCode();
+        auto exitStatus = zip.exitStatus();
 
         zip.kill();
 
@@ -200,7 +191,7 @@ QString QLoggerWriter::generateDuplicateFilename(const QString &fileDestination,
     return path;
 }
 
-void QLoggerWriter::write(QVector<QString> messages)
+void QLoggerWriter::write(const QVector<QString> &messages)
 {
     // Write data to console
     if (mMode == LogMode::OnlyConsole)
@@ -260,9 +251,7 @@ void QLoggerWriter::enqueue(const QDateTime &date, const QString &threadId, cons
     if (mMessageOptions.testFlag(LogMessageDisplay::Default))
     {
         text = QString("[%1][%2][%3][%4]%5 %6")
-                   .arg(levelToText(level), module)
-                   .arg(date.toString("yyyy-MM-dd hh:mm:ss:zzz"))
-                   .arg(threadId, fileLine, message);
+                   .arg(levelToText(level), module, date.toString("yyyy-MM-dd hh:mm:ss:zzz"), threadId, fileLine, message);
     }
     else
     {
@@ -324,7 +313,7 @@ void QLoggerWriter::run()
             std::swap(copy, mMessages);
         }
 
-        write(std::move(copy));
+        write(copy);
 
         lastActive = QDateTime::currentDateTime();
 
@@ -348,7 +337,7 @@ void QLoggerWriter::closeDestination()
             std::swap(copy, mMessages);
         }
 
-        write(std::move(copy));
+        write(copy);
     }
 
     QVector<QString> closed(0);

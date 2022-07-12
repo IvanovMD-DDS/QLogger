@@ -190,7 +190,7 @@ private:
     *
     * @param message Pair of values consistent on the date and the message to be log.
     */
-    void write(QVector<QString> messages);
+    void write(const QVector<QString>& messages);
 };
 
 }  // namespace QLogger
