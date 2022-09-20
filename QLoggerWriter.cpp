@@ -119,7 +119,7 @@ QString QLoggerWriter::renameFileIfFull()
         if (mQuit)  // if quit no zip
             return newName;
 
-        return zipFile(newName);
+        return zipFileCustom(newName);
     }
 
     //--------
@@ -332,7 +332,7 @@ void QLoggerWriter::forcePush()
     }
 }
 
-QString QLoggerWriter::zipFile(const QString &path)
+QString QLoggerWriter::zipFileCustom(const QString &path)
 {
     QMutexLocker zipLock1(&zipLock);
 
@@ -350,9 +350,8 @@ QString QLoggerWriter::zipFile(const QString &path)
 
     QProcess zip;
 
-    QString pathExe = "C:/Program Files/7-Zip/7z.exe";
+    QString pathExe = "7z";
     zip.start(pathExe, param);
-    zip.waitForStarted();
 
     bool res = zip.waitForFinished(1000 * 60 * 15);  // 15 min
 

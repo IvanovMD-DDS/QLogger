@@ -166,7 +166,7 @@ private:
     static QMutex writeLock;
     QDateTime lastActive = QDateTime::currentDateTime();
 
-    QString zipFile(const QString &path);
+    QString zipFileCustom(const QString &path);
 
     /**
     * @brief renameFileIfFull Truncates the log file in two. Keeps the filename for the new one and renames the old one
